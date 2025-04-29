@@ -92,11 +92,6 @@ if (!fs.existsSync(tasksFilePath)) {
   fs.writeFileSync(tasksFilePath, 'task_id,user_id,project_id,task_name,project_name,annotation_type,selected_files,created_at\n');
 }
 
-const jobsFilePath = path.join(__dirname, 'jobs.csv');
-if (!fs.existsSync(jobsFilePath)) {
-  fs.writeFileSync(jobsFilePath, 'job_id,user_id,task_id,project_id,progress,created_at\n');
-}
-
 // Add these right after the imports
 const rolesFilePath = path.join(__dirname, 'roles.csv');
 if (!fs.existsSync(rolesFilePath)) {
