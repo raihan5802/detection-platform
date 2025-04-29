@@ -1,0 +1,161 @@
+:root {
+    --primary-color: #2C3E50;
+    --accent-color: #3498db;
+    --accent-hover: #2980b9;
+    --background-color: #f7f9fc;
+    --text-color: #333;
+    --border-color: #dcdfe6;
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.05);
+    --transition: all 0.3s ease;
+  }
+  
+  .userhome-container {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    background: var(--background-color);
+    font-family: 'Segoe UI', 'SF Pro Display', -apple-system, BlinkMacSystemFont, Roboto, Oxygen, Ubuntu, sans-serif;
+    color: var(--text-color);
+  }
+  
+  .userhome-main {
+    flex: 1;
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  
+  .dashboard-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #fff;
+    padding: 20px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 30px;
+  }
+  
+  .dashboard-hero .hero-content {
+    flex: 1;
+  }
+  
+  .dashboard-hero h1 {
+    margin: 0 0 10px;
+    font-size: 2rem;
+  }
+  
+  .dashboard-hero p {
+    font-size: 1rem;
+  }
+  
+  .dashboard-hero .hero-image img {
+    width: 300px;
+    height: auto;
+    border-radius: var(--radius-md);
+    transition: var(--transition);
+  }
+  
+  .dashboard-hero .hero-image img:hover {
+    transform: scale(1.05);
+  }
+  
+  .dashboard-sections {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-bottom: 30px;
+  }
+  
+  .section-card {
+    background: #fff;
+    padding: 20px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    flex: 1 1 calc(33% - 20px);
+    min-width: 250px;
+    transition: var(--transition);
+  }
+  
+  .section-card:hover {
+    transform: translateY(-5px);
+  }
+  
+  .section-card h2 {
+    margin-top: 0;
+    font-size: 1.5rem;
+  }
+  
+  .section-card p {
+    font-size: 0.95rem;
+    margin: 10px 0;
+  }
+  
+  .section-card button {
+    padding: 10px 16px;
+    background: var(--accent-color);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: var(--transition);
+  }
+  
+  .section-card button:hover {
+    background: var(--accent-hover);
+  }
+  
+  .cta-section {
+    text-align: center;
+    background: var(--accent-color);
+    color: #fff;
+    padding: 30px 20px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition);
+  }
+  
+  .cta-section h2 {
+    margin: 0 0 10px;
+    font-size: 1.8rem;
+  }
+  
+  .cta-section p {
+    margin: 0 0 20px;
+    font-size: 1rem;
+  }
+  
+  .cta-section button {
+    padding: 12px 20px;
+    background: #fff;
+    color: var(--accent-color);
+    border: none;
+    border-radius: var(--radius-sm);
+    font-weight: bold;
+    cursor: pointer;
+    transition: var(--transition);
+  }
+  
+  .cta-section button:hover {
+    background: #f0f0f0;
+  }
+  
+  @media (max-width: 768px) {
+    .dashboard-hero {
+      flex-direction: column;
+      text-align: center;
+    }
+  
+    .dashboard-hero .hero-image img {
+      width: 100%;
+      max-width: 300px;
+      margin-top: 20px;
+    }
+  
+    .dashboard-sections {
+      flex-direction: column;
+    }
+  }
+  

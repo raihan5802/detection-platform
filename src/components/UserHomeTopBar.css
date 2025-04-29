@@ -1,0 +1,520 @@
+/* UserHomeTopBar.css - Fixed positioning */
+
+.user-home-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  width: 100%;
+  background: #2c3e50;
+  background: linear-gradient(to right, #2c3e50, #3a506b);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  color: white;
+}
+
+.topbar-container {
+  display: flex;
+  align-items: center;
+  max-width: 1600px;
+  margin: 0 auto;
+  height: 70px;
+  padding: 0 2rem;
+  /* Use this for proper positioning of all elements */
+  justify-content: space-between;
+}
+
+/* Logo section */
+.topbar-logo {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+  padding: 0.5rem 0;
+  /* Set a fixed width for the logo area */
+  width: 150px;
+  flex-shrink: 0;
+}
+
+.topbar-logo svg {
+  color: #4A90E2;
+  margin-right: 0.5rem;
+}
+
+.topbar-logo span {
+  font-size: 1.5rem;
+  font-weight: 700;
+  background: linear-gradient(120deg, #4A90E2, #357ABD);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Menu toggle for mobile */
+.topbar-menu-toggle {
+  display: none;
+  cursor: pointer;
+  width: 40px;
+  height: 40px;
+  position: relative;
+  justify-content: center;
+  align-items: center;
+}
+
+.menu-toggle-bar {
+  position: relative;
+  width: 24px;
+  height: 2px;
+  background-color: white;
+  transition: all 0.3s ease;
+}
+
+.menu-toggle-bar::before,
+.menu-toggle-bar::after {
+  content: '';
+  position: absolute;
+  width: 24px;
+  height: 2px;
+  background-color: white;
+  transition: all 0.3s ease;
+}
+
+.menu-toggle-bar::before {
+  transform: translateY(-8px);
+}
+
+.menu-toggle-bar::after {
+  transform: translateY(8px);
+}
+
+.menu-toggle-bar.open {
+  background-color: transparent;
+}
+
+.menu-toggle-bar.open::before {
+  transform: rotate(45deg);
+}
+
+.menu-toggle-bar.open::after {
+  transform: rotate(-45deg);
+}
+
+/* Center menu */
+.topbar-menu {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Take up all available space to properly center content */
+  flex: 1;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  margin: 0 1.5rem;
+  position: relative;
+  cursor: pointer;
+}
+
+.menu-item svg {
+  margin-right: 0.5rem;
+  color: rgba(255, 255, 255, 0.7);
+  transition: color 0.2s ease;
+}
+
+.menu-item span {
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.85);
+  transition: all 0.2s ease;
+  position: relative;
+  padding: 0.5rem 0;
+}
+
+.menu-item:hover svg,
+.menu-item:hover span {
+  color: #4A90E2;
+}
+
+.menu-item span:after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: #4A90E2;
+  transform: scaleX(0);
+  transition: transform 0.2s ease;
+  transform-origin: center;
+}
+
+.menu-item:hover span:after {
+  transform: scaleX(1);
+}
+
+/* User actions section - fixed width to balance with logo */
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  width: 150px;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+/* User profile */
+.user-profile {
+  position: relative;
+}
+
+.user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(74, 144, 226, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+}
+
+.user-avatar:hover {
+  background: rgba(74, 144, 226, 0.3);
+  transform: translateY(-2px);
+}
+
+.user-avatar span {
+  font-weight: 600;
+  color: #4A90E2;
+}
+
+.user-dropdown {
+  position: absolute;
+  top: calc(100% + 0.75rem);
+  right: 0;
+  background: #3a506b;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  width: 240px;
+  z-index: 100;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dropdown-header {
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.user-name {
+  display: block;
+  font-weight: 600;
+  color: white;
+  margin-bottom: 0.25rem;
+}
+
+.user-email {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.05);
+  margin: 0.5rem 0;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  padding: 0.85rem 1.25rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.dropdown-item svg {
+  margin-right: 0.75rem;
+}
+
+.dropdown-item:hover {
+  background: rgba(74, 144, 226, 0.1);
+  color: #4A90E2;
+}
+
+.signin-btn {
+  padding: 0.6rem 1.5rem;
+  background: linear-gradient(120deg, #4A90E2, #357ABD);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.signin-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(74, 144, 226, 0.2);
+}
+
+/* Annotation menu - ensures it's centered */
+.annotation-menu {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.task-name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 1rem;
+  padding: 0.5rem 1rem;
+  background: rgba(74, 144, 226, 0.1);
+  border-radius: 20px;
+}
+
+/* Notification system - improved visibility */
+.notification-bell {
+  position: relative;
+  margin-right: 15px;
+}
+
+.notification-button {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  cursor: pointer;
+  position: relative;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+}
+
+.notification-button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.notification-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background-color: #e53e3e;
+  color: white;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  border: 2px solid #2c3e50;
+}
+
+.notifications-panel {
+  position: absolute;
+  top: 45px;
+  right: -10px;
+  width: 320px;
+  max-height: 400px;
+  background-color: #3a506b;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  overflow: hidden;
+  animation: dropdown-fade 0.2s ease-out;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.notifications-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.notifications-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+}
+
+.unread-count {
+  background-color: rgba(74, 144, 226, 0.2);
+  color: #4A90E2;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.notifications-list {
+  max-height: 350px;
+  overflow-y: auto;
+}
+
+.notification-item {
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+}
+
+.notification-item:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.notification-item.unread {
+  background-color: rgba(74, 144, 226, 0.1);
+}
+
+.notification-item.unread:hover {
+  background-color: rgba(74, 144, 226, 0.15);
+}
+
+.notification-content {
+  flex: 1;
+}
+
+.notification-message {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.4;
+}
+
+.notification-time {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.unread-marker {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #4A90E2;
+  margin-left: 8px;
+}
+
+.no-notifications {
+  padding: 24px 16px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+}
+
+@keyframes dropdown-fade {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive styles */
+@media (max-width: 992px) {
+  .topbar-container {
+    padding: 0 1rem;
+    justify-content: space-between;
+  }
+
+  .topbar-logo,
+  .topbar-actions {
+    width: auto;
+  }
+
+  .topbar-menu {
+    position: fixed;
+    top: 70px;
+    left: 0;
+    width: 100%;
+    background: #2c3e50;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 1rem 2rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transform: translateY(-100%);
+    opacity: 0;
+    transition: all 0.3s ease;
+    z-index: 99;
+    visibility: hidden;
+    justify-content: flex-start;
+  }
+
+  .topbar-menu.open {
+    transform: translateY(0);
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .menu-item {
+    margin: 0;
+    margin-bottom: 1rem;
+    width: 100%;
+  }
+
+  .topbar-menu-toggle {
+    display: flex;
+    order: 3;
+  }
+
+  .topbar-actions {
+    order: 2;
+  }
+
+  .annotation-menu {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 1rem;
+  }
+}
+
+@media (max-width: 576px) {
+  .topbar-container {
+    padding: 0 0.75rem;
+  }
+
+  .topbar-logo span {
+    font-size: 1.25rem;
+  }
+
+  .notifications-panel {
+    position: fixed;
+    top: 70px;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-height: 60vh;
+    border-radius: 0;
+  }
+}

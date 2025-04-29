@@ -1,0 +1,118 @@
+:root {
+  --primary-color: #2C3E50;
+  --secondary-color: #ecf0f1;
+  --accent-color: #2980b9;
+  --hover-accent: #1f6690;
+  --background-dark: #34495e;
+}
+
+/* Top bar styling */
+.anno-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--background-dark);
+  padding: 12px 20px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  color: var(--secondary-color);
+}
+
+.anno-topbar button {
+  margin-right: 12px;
+  padding: 8px 16px;
+  background: var(--secondary-color);
+  color: var(--primary-color);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.3s;
+  font-size: 0.95rem;
+}
+
+.anno-topbar button:hover {
+  background: #d6dbdf;
+}
+
+.anno-topbar button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.left-buttons,
+.right-buttons {
+  display: flex;
+  align-items: center;
+}
+
+.middle-info {
+  flex: 1;
+  text-align: center;
+  font-size: 1rem;
+}
+
+.task-name {
+  font-weight: bold;
+}
+
+.img-count {
+  margin-left: 12px;
+  font-weight: 600;
+}
+
+/* Modal backdrop for keyboard shortcuts */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+/* Modal content styling */
+.shortcuts-modal {
+  background: var(--secondary-color);
+  color: var(--primary-color);
+  padding: 20px;
+  border-radius: 8px;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  max-height: 80%;
+  overflow-y: auto;
+}
+
+.shortcuts-modal h2 {
+  margin-top: 0;
+}
+
+.shortcuts-modal table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+}
+
+.shortcuts-modal td {
+  padding: 8px;
+  border-bottom: 1px solid #ccc;
+}
+
+/* Close button styling */
+.close-modal {
+  margin-top: 10px;
+  padding: 8px 16px;
+  background: var(--accent-color);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.close-modal:hover {
+  background: var(--hover-accent);
+}

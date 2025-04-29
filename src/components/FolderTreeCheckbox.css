@@ -1,0 +1,143 @@
+/* src/components/FolderTreeCheckbox.css */
+:root {
+    --primary-color: #4363d8;
+    --accent-color: #7e3af2;
+    --text-color: #2d3748;
+    --text-light: #718096;
+    --glow-color: rgba(67, 99, 216, 0.3);
+    --transition: all 0.3s ease;
+}
+
+.folder-tree-checkbox-node {
+    margin-left: 25px;
+    font-family: 'Inter', sans-serif;
+}
+
+.folder-tree-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 15px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: var(--transition);
+    user-select: none; /* Prevent text selection on double-click */
+}
+
+.folder-tree-checkbox-label:hover {
+    background: rgba(67, 99, 216, 0.1);
+    transform: translateX(5px);
+}
+
+.toggle-icon {
+    font-size: 14px;
+    color: var(--primary-color);
+    width: 14px;
+    text-align: center;
+    transition: transform var(--transition);
+}
+
+.folder-tree-checkbox-label:hover .toggle-icon {
+    transform: scale(1.2);
+}
+
+.folder-icon,
+.file-icon {
+    width: 20px;
+    height: 20px;
+    color: var(--primary-color);
+    transition: transform var(--transition);
+}
+
+.folder-tree-checkbox-label:hover .folder-icon,
+.folder-tree-checkbox-label:hover .file-icon {
+    transform: scale(1.15);
+}
+
+.node-name {
+    font-size: 1rem;
+    color: var(--text-color);
+    flex-grow: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--primary-color);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+input[type="checkbox"]:hover {
+    box-shadow: 0 0 8px var(--glow-color);
+}
+
+.folder-tree-checkbox-children {
+    margin-left: 30px;
+    padding-top: 5px;
+    border-left: 1px dashed var(--text-light);
+}
+
+/* Animations */
+.folder-tree-checkbox-children {
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .folder-tree-checkbox-node {
+        margin-left: 20px;
+    }
+
+    .folder-tree-checkbox-label {
+        padding: 8px 12px;
+        gap: 8px;
+    }
+
+    .folder-icon,
+    .file-icon {
+        width: 18px;
+        height: 18px;
+    }
+
+    .node-name {
+        font-size: 0.95rem;
+    }
+
+    .folder-tree-checkbox-children {
+        margin-left: 25px;
+    }
+}
+
+@media (max-width: 480px) {
+    .folder-tree-checkbox-node {
+        margin-left: 15px;
+    }
+
+    .folder-tree-checkbox-label {
+        padding: 6px 10px;
+        gap: 6px;
+    }
+
+    .folder-icon,
+    .file-icon {
+        width: 16px;
+        height: 16px;
+    }
+
+    .node-name {
+        font-size: 0.9rem;
+    }
+
+    .folder-tree-checkbox-children {
+        margin-left: 20px;
+    }
+}

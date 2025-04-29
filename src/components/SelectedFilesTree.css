@@ -1,0 +1,15 @@
+.selected-files-node {
+    margin-left: 20px;
+}
+
+.node-label {
+    cursor: pointer;
+    padding: 4px 0;
+    font-weight: bold;
+}
+
+.node-children {
+    margin-left: 20px;
+    border-left: 1px dashed #ccc;
+    padding-left: 10px;
+}

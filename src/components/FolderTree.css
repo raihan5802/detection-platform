@@ -1,0 +1,14 @@
+.folder-tree-node {
+    margin-left: 20px;
+}
+
+.folder-tree-label {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    user-select: none;
+}
+
+.toggle-icon {
+    margin-right: 5px;
+}
