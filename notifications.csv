@@ -1,3 +1,0 @@
-notification_id,user_id,message,is_read,related_project_id,created_at
-d57244de-9eaf-442e-92d1-aed8ba2eb48e,1744514095718,You have been assigned as collaborator for project "t1",false,19ab60c6-7149-4e3f-8323-3591e5b3026e,2025-05-02T14:14:54.811Z
-1f6b635e-f6c3-4d5f-a6b0-c5e984abeced,1744514095718,pm gave you editor access to task "t1-1",false,19ab60c6-7149-4e3f-8323-3591e5b3026e,2025-05-02T14:15:09.299Z
