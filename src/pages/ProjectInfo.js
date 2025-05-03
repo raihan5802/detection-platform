@@ -14,6 +14,7 @@ import {
     FiUploadCloud,
     FiCheckSquare,
     FiInfo,
+    FiX,
     FiGrid,
     FiChevronRight,
     FiEdit,
@@ -155,6 +156,8 @@ export default function ProjectInfo() {
         collaborator: ''
     });
 
+    // Add this state variable with the other state variables at the top of your component
+    const [availableUsers, setAvailableUsers] = useState([]);
 
     // First fetch the user session
     useEffect(() => {
@@ -296,6 +299,25 @@ export default function ProjectInfo() {
             fetchUserDataFolders();
         }
     }, [project, userSession]);
+
+    // Add this useEffect to fetch users
+    useEffect(() => {
+        const fetchUsers = async () => {
+            try {
+                const res = await fetch('http://localhost:4000/api/users');
+                if (res.ok) {
+                    const users = await res.json();
+                    setAvailableUsers(users);
+                } else {
+                    console.error('Failed to fetch users');
+                }
+            } catch (error) {
+                console.error('Error fetching users:', error);
+            }
+        };
+
+        fetchUsers();
+    }, []);
 
     // Handle adding a new label.
     const handleAddLabel = async () => {

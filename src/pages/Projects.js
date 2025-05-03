@@ -39,6 +39,7 @@ export default function Projects() {
         } else {
           console.error('Failed to fetch projects');
         }
+
       } catch (error) {
         console.error('Error fetching projects:', error);
       } finally {
@@ -59,18 +60,28 @@ export default function Projects() {
     }
 
     if (deleteConfirmation === projectId) {
-      try {
-        const res = await fetch(`http://localhost:4000/api/projects/${projectId}`, {
-          method: 'DELETE',
-        });
-        if (res.ok) {
-          setProjects(projects.filter(project => project.project_id !== projectId));
-          setDeleteConfirmation(null);
-        } else {
-          console.error('Failed to delete project');
+      // Second confirmation about tasks
+      if (window.confirm("Deleting this project will also delete all its associated tasks. Are you sure?")) {
+        try {
+          const res = await fetch(`http://localhost:4000/api/projects/${projectId}?userId=${userSession.id}`, {
+            method: 'DELETE',
+          });
+          if (res.ok) {
+            setProjects(projects.filter(project => project.project_id !== projectId));
+            setDeleteConfirmation(null);
+            alert('Project and all associated tasks deleted successfully');
+          } else {
+            const error = await res.json();
+            alert(error.error || 'Failed to delete project');
+            console.error('Failed to delete project:', error);
+          }
+        } catch (error) {
+          console.error('Error deleting project:', error);
+          alert('An error occurred while deleting the project.');
         }
-      } catch (error) {
-        console.error('Error deleting project:', error);
+      } else {
+        // User canceled the second confirmation
+        setDeleteConfirmation(null);
       }
     } else {
       setDeleteConfirmation(projectId);

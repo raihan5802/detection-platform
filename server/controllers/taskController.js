@@ -1,320 +1,346 @@
-const { Task, User, Project, TaskAccess, Notification } = require('../models');
-const { v4: uuidv4 } = require('uuid');
-const sequelize = require('../config/database');
-const path = require('path');
+// database implementation - server/controller/taskController.js
+
 const fs = require('fs');
-const { Op } = require('sequelize');
+const path = require('path');
+const { v4: uuidv4 } = require('uuid');
+const { pool } = require('../config/database');
 
 /**
  * Create a new task
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-exports.createTask = async (req, res) => {
-    const transaction = await sequelize.transaction();
+async function createTask(req, res) {
+    const client = await pool.connect();
 
     try {
+        await client.query('BEGIN');
+
         const { userId, projectId, taskName, projectName, annotationType, selectedFolders, teamAccess } = req.body;
 
         // Validate required fields
         if (!userId || !projectId || !taskName || !projectName || !annotationType || !selectedFolders) {
-            await transaction.rollback();
             return res.status(400).json({ error: "All fields are required" });
         }
 
         // Extract only the folder paths that were checked
         const selectedFolderPaths = Object.keys(selectedFolders).filter(key => selectedFolders[key]);
         if (selectedFolderPaths.length === 0) {
-            await transaction.rollback();
             return res.status(400).json({ error: "At least one folder must be selected" });
         }
 
         const taskId = uuidv4();
-        const createdAt = new Date().toISOString();
 
-        // Create task
-        await Task.create({
-            task_id: taskId,
-            user_id: userId,
-            project_id: projectId,
-            task_name: taskName,
-            project_name: projectName,
-            annotation_type: annotationType,
-            selected_files: selectedFolderPaths.join(';'),
-            created_at: createdAt
-        }, { transaction });
+        // Convert the array to a proper JSON object for PostgreSQL
+        const selectedFilesJson = JSON.stringify(selectedFolderPaths);
 
-        // Default access for task creator
-        await TaskAccess.create({
-            task_id: taskId,
-            user_id: userId,
-            access_level: 'editor',
-            assigned_by: userId,
-            assigned_at: createdAt
-        }, { transaction });
+        // Insert task into database - using JSON format for selected_files
+        await client.query(
+            'INSERT INTO tasks (task_id, user_id, project_id, task_name, project_name, annotation_type, selected_files) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+            [taskId, userId, projectId, taskName, projectName, annotationType, selectedFilesJson]
+        );
 
         // Process team access permissions if provided
         if (teamAccess && Object.keys(teamAccess).length > 0) {
+            // Add project owner as editor by default
+            await client.query(
+                'INSERT INTO task_access (task_id, user_id, access_level, assigned_by) VALUES ($1, $2, $3, $4)',
+                [taskId, userId, 'editor', userId]
+            );
+
+            // Add team access for other members
             for (const [memberId, accessLevel] of Object.entries(teamAccess)) {
-                if (memberId !== userId && accessLevel !== 'no_access') {
-                    // Add task access
-                    await TaskAccess.create({
-                        task_id: taskId,
-                        user_id: memberId,
-                        access_level: accessLevel,
-                        assigned_by: userId,
-                        assigned_at: createdAt
-                    }, { transaction });
+                if (memberId !== userId) { // Skip if it's the owner (already added)
+                    await client.query(
+                        'INSERT INTO task_access (task_id, user_id, access_level, assigned_by) VALUES ($1, $2, $3, $4)',
+                        [taskId, memberId, accessLevel, userId]
+                    );
+                }
 
-                    // Create notification
-                    const ownerUser = await User.findByPk(userId, { transaction });
-                    const ownerUsername = ownerUser ? ownerUser.username : "A team member";
+                // Send notifications to team members
+                if (accessLevel !== 'no_access') {
+                    // Get project owner's username
+                    const userResult = await client.query(
+                        'SELECT username FROM users WHERE id = $1',
+                        [userId]
+                    );
 
-                    await Notification.create({
-                        notification_id: uuidv4(),
-                        user_id: memberId,
-                        message: `${ownerUsername} gave you ${accessLevel} access to task "${taskName}"`,
-                        is_read: false,
-                        related_project_id: projectId,
-                        created_at: createdAt
-                    }, { transaction });
+                    let ownerUsername = "A team member";
+                    if (userResult.rows.length > 0) {
+                        ownerUsername = userResult.rows[0].username;
+                    }
+
+                    // Create notification with notification_id
+                    const notificationId = uuidv4();
+                    await client.query(
+                        'INSERT INTO notifications (notification_id, user_id, message, is_read, related_project_id) VALUES ($1, $2, $3, $4, $5)',
+                        [notificationId, memberId, `${ownerUsername} gave you ${accessLevel} access to task "${taskName}"`, false, projectId]
+                    );
                 }
             }
+        } else {
+            // If no explicit access is provided, add the project owner as editor
+            await client.query(
+                'INSERT INTO task_access (task_id, user_id, access_level, assigned_by) VALUES ($1, $2, $3, $4)',
+                [taskId, userId, 'editor', userId]
+            );
         }
 
-        await transaction.commit();
+        await client.query('COMMIT');
 
         res.json({ taskId, message: "Task created successfully" });
     } catch (error) {
-        await transaction.rollback();
+        await client.query('ROLLBACK');
         console.error("Error creating task:", error);
         res.status(500).json({ error: "Failed to create task" });
+    } finally {
+        client.release();
     }
-};
+}
 
 /**
  * Get tasks for a user
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-exports.getTasks = async (req, res) => {
+async function getTasks(req, res) {
     try {
+        // Get userId from query
         const userId = req.query.userId;
-
         if (!userId) {
             return res.status(400).json({ error: "User ID is required" });
         }
 
-        // Get tasks created by this user
-        const ownTasks = await Task.findAll({
-            where: { user_id: userId },
-            include: [
-                {
-                    model: Project,
-                    attributes: ['project_id', 'project_name', 'project_type']
-                }
-            ]
-        });
+        // Query for tasks user has access to
+        const query = `
+            WITH user_task_access AS (
+                -- Tasks user created (always has editor access)
+                SELECT 
+                    t.task_id, 
+                    'editor' AS access_level
+                FROM 
+                    tasks t
+                WHERE 
+                    t.user_id = $1
+                
+                UNION
+                
+                -- Tasks user has explicit access to
+                SELECT 
+                    ta.task_id, 
+                    ta.access_level
+                FROM 
+                    task_access ta
+                WHERE 
+                    ta.user_id = $1 
+                    AND ta.access_level != 'no_access'
+            )
+            
+            SELECT 
+                t.task_id,
+                t.user_id,
+                t.project_id,
+                t.task_name,
+                t.project_name,
+                t.annotation_type,
+                t.selected_files,
+                t.created_at,
+                uta.access_level
+            FROM 
+                tasks t
+            JOIN 
+                user_task_access uta ON t.task_id = uta.task_id
+            ORDER BY 
+                t.created_at DESC;
+        `;
 
-        // Get tasks where user has access
-        const userAccess = await TaskAccess.findAll({
-            where: {
-                user_id: userId,
-                access_level: {
-                    [Op.ne]: 'no_access'
+        const result = await pool.query(query, [userId]);
+
+        // Format the results - convert JSON selected_files to semicolon-separated string for client compatibility
+        const accessibleTasks = result.rows.map(row => {
+            let selectedFiles = row.selected_files;
+
+            // Convert from JSON array to semicolon-separated string for frontend compatibility
+            if (selectedFiles) {
+                if (Array.isArray(selectedFiles)) {
+                    selectedFiles = selectedFiles.join(';');
+                } else if (typeof selectedFiles === 'object') {
+                    // If it's a JSON object, stringify it
+                    selectedFiles = JSON.stringify(selectedFiles);
+                } else if (typeof selectedFiles === 'string') {
+                    // If it's already a string, try to parse it as JSON first
+                    try {
+                        const parsedJson = JSON.parse(selectedFiles);
+                        if (Array.isArray(parsedJson)) {
+                            selectedFiles = parsedJson.join(';');
+                        }
+                    } catch (e) {
+                        // If it's not valid JSON, it might already be a semicolon string
+                    }
                 }
             }
+
+            return {
+                task_id: row.task_id,
+                user_id: row.user_id,
+                project_id: row.project_id,
+                task_name: row.task_name,
+                project_name: row.project_name,
+                annotation_type: row.annotation_type,
+                selected_files: selectedFiles,
+                created_at: row.created_at,
+                access_level: row.access_level
+            };
         });
 
-        const accessTaskIds = userAccess.map(access => access.task_id);
-
-        // Get tasks where user has access but is not the creator
-        const otherTasks = accessTaskIds.length > 0 ?
-            await Task.findAll({
-                where: {
-                    task_id: {
-                        [Op.in]: accessTaskIds
-                    },
-                    user_id: {
-                        [Op.ne]: userId
-                    }
-                },
-                include: [
-                    {
-                        model: Project,
-                        attributes: ['project_id', 'project_name', 'project_type']
-                    }
-                ]
-            }) : [];
-
-        // Combine and format tasks
-        const allTasks = [...ownTasks, ...otherTasks].map(task => {
-            const taskData = task.toJSON();
-
-            // Add access level
-            if (taskData.user_id === userId) {
-                taskData.access_level = 'editor';
-            } else {
-                const accessRecord = userAccess.find(access => access.task_id === taskData.task_id);
-                taskData.access_level = accessRecord ? accessRecord.access_level : 'no_access';
-            }
-
-            return taskData;
-        });
-
-        res.json(allTasks);
+        res.json(accessibleTasks);
     } catch (error) {
-        console.error("Error fetching tasks:", error);
+        console.error("Error reading tasks:", error);
         res.status(500).json({ error: "Failed to fetch tasks" });
     }
-};
+}
 
 /**
- * Get task access level for a user
+ * Get task access level for a specific user
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-exports.getTaskAccess = async (req, res) => {
+async function getTaskAccess(req, res) {
     try {
         const { taskId, userId } = req.params;
 
         // Check if user is the task creator
-        const task = await Task.findOne({
-            where: {
-                task_id: taskId,
-                user_id: userId
-            }
-        });
+        const taskResult = await pool.query(
+            'SELECT user_id FROM tasks WHERE task_id = $1',
+            [taskId]
+        );
 
-        if (task) {
+        if (taskResult.rows.length > 0 && taskResult.rows[0].user_id === userId) {
+            // Task creator always has editor access
             return res.json({ access_level: 'editor' });
         }
 
-        // Check task access
-        const taskAccess = await TaskAccess.findOne({
-            where: {
-                task_id: taskId,
-                user_id: userId
-            }
-        });
+        // Check task_access for this user
+        const accessResult = await pool.query(
+            'SELECT access_level FROM task_access WHERE task_id = $1 AND user_id = $2',
+            [taskId, userId]
+        );
 
-        if (taskAccess) {
-            return res.json({ access_level: taskAccess.access_level });
+        if (accessResult.rows.length > 0) {
+            return res.json({ access_level: accessResult.rows[0].access_level });
         }
 
-        // Default to no access
+        // Default to no access if not found
         res.json({ access_level: 'no_access' });
     } catch (error) {
         console.error('Error fetching task access:', error);
         res.status(500).json({ error: 'Failed to fetch task access' });
     }
-};
+}
 
 /**
  * Bulk update task access levels
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-exports.bulkUpdateTaskAccess = async (req, res) => {
-    const transaction = await sequelize.transaction();
+async function bulkUpdateTaskAccess(req, res) {
+    const client = await pool.connect();
 
     try {
+        await client.query('BEGIN');
+
         const { taskId } = req.params;
         const { accessLevels, assignedBy } = req.body;
 
         if (!taskId || !assignedBy || !accessLevels || typeof accessLevels !== 'object') {
-            await transaction.rollback();
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
-        // Verify the task exists
-        const task = await Task.findByPk(taskId, { transaction });
+        // Verify the task exists and get its data
+        const taskResult = await client.query(
+            'SELECT task_id, user_id, project_id, task_name FROM tasks WHERE task_id = $1',
+            [taskId]
+        );
 
-        if (!task) {
-            await transaction.rollback();
+        if (taskResult.rows.length === 0) {
             return res.status(404).json({ error: 'Task not found' });
         }
 
+        const taskData = taskResult.rows[0];
+
         // Verify user has permission to update access
-        let hasPermission = false;
+        if (taskData.user_id !== assignedBy) {
+            // Check if user has editor access
+            const accessResult = await client.query(
+                'SELECT access_level FROM task_access WHERE task_id = $1 AND user_id = $2',
+                [taskId, assignedBy]
+            );
 
-        if (task.user_id === assignedBy) {
-            hasPermission = true;
-        } else {
-            const userAccess = await TaskAccess.findOne({
-                where: {
-                    task_id: taskId,
-                    user_id: assignedBy,
-                    access_level: 'editor'
-                },
-                transaction
-            });
-
-            hasPermission = !!userAccess;
+            if (accessResult.rows.length === 0 || accessResult.rows[0].access_level !== 'editor') {
+                return res.status(403).json({ error: 'You do not have permission to update access levels' });
+            }
         }
 
-        if (!hasPermission) {
-            await transaction.rollback();
-            return res.status(403).json({ error: 'You do not have permission to update access levels' });
-        }
+        // Get original access levels to compare for notifications
+        const originalAccessResult = await client.query(
+            'SELECT user_id, access_level FROM task_access WHERE task_id = $1',
+            [taskId]
+        );
 
-        // Get original access levels to compare
         const originalAccess = {};
-        const existingAccess = await TaskAccess.findAll({
-            where: { task_id: taskId },
-            transaction
+        originalAccessResult.rows.forEach(row => {
+            originalAccess[row.user_id] = row.access_level;
         });
 
-        existingAccess.forEach(access => {
-            originalAccess[access.user_id] = access.access_level;
-        });
+        // Get assigner's username
+        const assignerResult = await client.query(
+            'SELECT username FROM users WHERE id = $1',
+            [assignedBy]
+        );
 
-        // Delete current access levels
-        await TaskAccess.destroy({
-            where: { task_id: taskId },
-            transaction
-        });
+        let assignerUsername = "A team member";
+        if (assignerResult.rows.length > 0) {
+            assignerUsername = assignerResult.rows[0].username;
+        }
+
+        // Delete existing access levels for this task
+        await client.query(
+            'DELETE FROM task_access WHERE task_id = $1',
+            [taskId]
+        );
 
         // Add updated access levels
-        const timestamp = new Date().toISOString();
         const userIdsToNotify = new Set();
-
-        // Get assigner username
-        const assignerUser = await User.findByPk(assignedBy, {
-            attributes: ['username'],
-            transaction
-        });
-        const assignerUsername = assignerUser ? assignerUser.username : "A team member";
 
         for (const [userId, accessLevel] of Object.entries(accessLevels)) {
             if (['editor', 'viewer', 'no_access'].includes(accessLevel)) {
-                await TaskAccess.create({
-                    task_id: taskId,
-                    user_id: userId,
-                    access_level: accessLevel,
-                    assigned_by: assignedBy,
-                    assigned_at: timestamp
-                }, { transaction });
+                await client.query(
+                    'INSERT INTO task_access (task_id, user_id, access_level, assigned_by) VALUES ($1, $2, $3, $4)',
+                    [taskId, userId, accessLevel, assignedBy]
+                );
 
-                // Check if access has changed and create notification
+                // Check if user's access has changed and needs notification
                 const oldAccessLevel = originalAccess[userId] || 'no_access';
 
                 if (accessLevel !== oldAccessLevel && accessLevel !== 'no_access') {
                     userIdsToNotify.add(userId);
 
-                    await Notification.create({
-                        notification_id: uuidv4(),
-                        user_id: userId,
-                        message: `${assignerUsername} gave you ${accessLevel} access to task "${task.task_name}"`,
-                        is_read: false,
-                        related_project_id: task.project_id,
-                        created_at: timestamp
-                    }, { transaction });
+                    const notificationId = uuidv4(); // Generate notification ID
+                    await client.query(
+                        'INSERT INTO notifications (notification_id, user_id, message, is_read, related_project_id) VALUES ($1, $2, $3, $4, $5)',
+                        [
+                            notificationId,
+                            userId,
+                            `${assignerUsername} gave you ${accessLevel} access to task "${taskData.task_name}"`,
+                            false,
+                            taskData.project_id
+                        ]
+                    );
                 }
             }
         }
 
-        await transaction.commit();
+        await client.query('COMMIT');
 
         res.json({
             message: 'Access levels updated successfully',
@@ -322,92 +348,78 @@ exports.bulkUpdateTaskAccess = async (req, res) => {
             notifiedUsers: Array.from(userIdsToNotify)
         });
     } catch (error) {
-        await transaction.rollback();
+        await client.query('ROLLBACK');
         console.error('Error updating task access levels:', error);
         res.status(500).json({ error: 'Failed to update access levels' });
+    } finally {
+        client.release();
     }
-};
+}
 
 /**
- * Get project team members for task assignment
+ * Delete a task and its associated records
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-exports.getProjectTeam = async (req, res) => {
+async function deleteTask(req, res) {
+    const client = await pool.connect();
+
     try {
-        const { projectId } = req.params;
+        await client.query('BEGIN');
 
-        const projectRoles = await Role.findAll({
-            where: { project_id: projectId },
-            include: [
-                {
-                    model: User,
-                    attributes: ['id', 'username', 'email']
-                }
-            ]
-        });
+        const { taskId } = req.params;
+        const userId = req.query.userId;
 
-        if (projectRoles.length === 0) {
-            return res.json([]);
-        }
+        console.log(`Attempting to delete task ${taskId} by user ${userId}`);
 
-        const teamMembers = projectRoles.map(role => ({
-            user_id: role.User.id,
-            username: role.User.username,
-            email: role.User.email,
-            role_type: role.role_type
-        }));
+        // Get task information and verify ownership if userId provided
+        const taskQuery = userId
+            ? 'SELECT * FROM tasks WHERE task_id = $1 AND user_id = $2'
+            : 'SELECT * FROM tasks WHERE task_id = $1';
 
-        res.json(teamMembers);
-    } catch (error) {
-        console.error('Error fetching project team:', error);
-        res.status(500).json({ error: 'Failed to fetch project team' });
-    }
-};
+        const taskParams = userId ? [taskId, userId] : [taskId];
+        const taskResult = await client.query(taskQuery, taskParams);
 
-/**
- * Find first image in a folder for task card
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- */
-exports.getFirstImage = (req, res) => {
-    try {
-        const folderPath = req.query.folderPath;
-        if (!folderPath) return res.status(400).json({ error: 'folderPath required' });
-
-        const basePath = path.join(__dirname, '../../uploads', folderPath);
-        if (!fs.existsSync(basePath)) {
-            return res.status(404).json({ error: 'Folder not found' });
-        }
-
-        const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
-
-        function findFirstImage(dir) {
-            const items = fs.readdirSync(dir);
-            for (let item of items) {
-                const fullPath = path.join(dir, item);
-                const stat = fs.statSync(fullPath);
-                if (stat.isFile()) {
-                    const ext = path.extname(item).toLowerCase();
-                    if (imageExtensions.includes(ext)) {
-                        return item;
-                    }
-                } else if (stat.isDirectory()) {
-                    const found = findFirstImage(fullPath);
-                    if (found) return path.join(item, found);
-                }
+        if (taskResult.rows.length === 0) {
+            if (userId) {
+                await client.query('ROLLBACK');
+                return res.status(403).json({ error: 'Only task owners can delete tasks' });
+            } else {
+                await client.query('ROLLBACK');
+                return res.status(404).json({ error: 'Task not found' });
             }
-            return null;
         }
 
-        const imageFile = findFirstImage(basePath);
-        if (imageFile) {
-            return res.json({ imageUrl: `uploads/${folderPath}/${imageFile}` });
-        } else {
-            return res.status(404).json({ error: 'No image found in folder' });
-        }
+        const taskData = taskResult.rows[0];
+        console.log(`Found task: ${taskData.task_name}`);
+
+        // Delete task access records for this task
+        await client.query('DELETE FROM task_access WHERE task_id = $1', [taskId]);
+        console.log('Task access records deleted');
+
+        // Delete the task
+        await client.query('DELETE FROM tasks WHERE task_id = $1', [taskId]);
+        console.log('Task deleted');
+
+        await client.query('COMMIT');
+
+        res.json({
+            message: 'Task deleted successfully',
+            taskName: taskData.task_name
+        });
     } catch (error) {
-        console.error('Error finding first image:', error);
-        res.status(500).json({ error: 'Failed to find first image' });
+        await client.query('ROLLBACK');
+        console.error('Error deleting task:', error);
+        res.status(500).json({ error: 'Failed to delete task' });
+    } finally {
+        client.release();
     }
+}
+
+module.exports = {
+    createTask,
+    getTasks,
+    getTaskAccess,
+    bulkUpdateTaskAccess,
+    deleteTask
 };

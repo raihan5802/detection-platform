@@ -1,109 +1,105 @@
-const { User } = require('../models');
-const { v4: uuidv4 } = require('uuid');
-
-/**
- * Register a new user
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- */
-exports.signup = async (req, res) => {
-    try {
-        const { username, email, password } = req.body;
-
-        // Check if user already exists
-        const existingUser = await User.findOne({ where: { email } });
-        if (existingUser) {
-            return res.status(400).json({ error: 'User with this email already exists' });
-        }
-
-        // Create new user
-        const user = await User.create({
-            id: uuidv4(),
-            username,
-            email,
-            password, // Note: In production, password should be hashed
-            created_at: new Date()
-        });
-
-        res.status(201).json({
-            message: 'User signed up successfully',
-            userId: user.id
-        });
-    } catch (error) {
-        console.error('Error signing up user:', error);
-        res.status(500).json({ error: 'Error signing up user' });
-    }
-};
-
-/**
- * Authenticate user and get token
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- */
-exports.signin = async (req, res) => {
-    try {
-        const { email, password } = req.body;
-
-        // Find user by email
-        const user = await User.findOne({ where: { email } });
-
-        // Check if user exists and password is correct
-        if (!user || user.password !== password) { // In production, use proper password comparison
-            return res.status(401).json({ error: 'Invalid email or password' });
-        }
-
-        // Return user data (excluding password)
-        const userData = {
-            id: user.id,
-            username: user.username,
-            email: user.email
-        };
-
-        res.json({ user: userData });
-    } catch (error) {
-        console.error('Error signing in user:', error);
-        res.status(500).json({ error: 'Error signing in' });
-    }
-};
+const { pool } = require('../config/database');
+const bcrypt = require('bcrypt');
 
 /**
  * Get all users
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-exports.getAllUsers = async (req, res) => {
+async function getUsers(req, res) {
     try {
-        const users = await User.findAll({
-            attributes: ['id', 'username', 'email'] // Exclude password
-        });
+        const result = await pool.query('SELECT id, username, email FROM users');
 
-        res.json(users);
+        res.json(result.rows);
     } catch (error) {
         console.error('Error fetching users:', error);
         res.status(500).json({ error: 'Failed to fetch users' });
     }
-};
+}
 
 /**
- * Get user by ID
+ * Sign up a new user
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-exports.getUserById = async (req, res) => {
+async function signup(req, res) {
+    const { username, email, password } = req.body;
+
+    // Validate input
+    if (!username || !email || !password) {
+        return res.status(400).json({ error: 'Username, email, and password are required' });
+    }
+
     try {
-        const { userId } = req.params;
+        // Check if email already exists
+        const existingUser = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
 
-        const user = await User.findByPk(userId, {
-            attributes: ['id', 'username', 'email'] // Exclude password
-        });
-
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
+        if (existingUser.rows.length > 0) {
+            return res.status(400).json({ error: 'Email already exists' });
         }
 
-        res.json(user);
+        // Hash the password
+        const saltRounds = 10;
+        const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+        // Insert new user
+        const result = await pool.query(
+            'INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING id, username, email',
+            [username, email, hashedPassword]
+        );
+
+        res.status(201).json({
+            message: 'User signed up successfully',
+            user: result.rows[0]
+        });
     } catch (error) {
-        console.error('Error fetching user:', error);
-        res.status(500).json({ error: 'Failed to fetch user' });
+        console.error('Error signing up user:', error);
+        res.status(500).json({ error: 'Error signing up user' });
     }
+}
+
+/**
+ * Sign in a user
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+async function signin(req, res) {
+    const { email, password } = req.body;
+
+    // Validate input
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    try {
+        // Find user by email
+        const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+
+        if (result.rows.length === 0) {
+            return res.status(401).json({ error: 'Invalid email or password' });
+        }
+
+        const user = result.rows[0];
+
+        // Compare passwords
+        const passwordMatch = await bcrypt.compare(password, user.password);
+
+        if (passwordMatch) {
+            // Don't send password back to client
+            const { password, ...userWithoutPassword } = user;
+
+            res.json({ user: userWithoutPassword });
+        } else {
+            res.status(401).json({ error: 'Invalid email or password' });
+        }
+    } catch (error) {
+        console.error('Error signing in user:', error);
+        res.status(500).json({ error: 'Error signing in user' });
+    }
+}
+
+module.exports = {
+    getUsers,
+    signup,
+    signin
 };

@@ -67,9 +67,15 @@ const UserDataControls = ({ projectId, userId, username, userFolder, onUpdate, u
 
     // Get upload date in readable format
     const getFormattedDate = () => {
-        const datePart = userFolder.split('_')[1];
-        if (datePart && datePart.length === 8) {
-            return `${datePart.slice(0, 4)}-${datePart.slice(4, 6)}-${datePart.slice(6, 8)}`;
+        const parts = userFolder.split('_');
+        if (parts.length >= 2) {
+            // Check if it's the old date format (username_YYYYMMDD)
+            const datePart = parts[1];
+            if (datePart && datePart.length === 8 && /^\d+$/.test(datePart)) {
+                return `${datePart.slice(0, 4)}-${datePart.slice(4, 6)}-${datePart.slice(6, 8)}`;
+            }
+            // For the new format (username_userId), show a different message
+            return 'User ID: ' + parts[1];
         }
         return 'Unknown date';
     };

@@ -3,6 +3,7 @@
   "version": "2.1.0",
   "private": true,
   "dependencies": {
+    "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^4.21.2",
@@ -31,7 +32,7 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "server:start": "node server/index.js",
-    "db:setup": "node server/db/index.js"
+    "db:setup": "node server/db/init-db.js"
   },
   "browserslist": {
     "production": [

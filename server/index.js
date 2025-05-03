@@ -1,100 +1,75 @@
-// server/index.js
 const express = require('express');
-const http = require('http');
-const path = require('path');
 const cors = require('cors');
-const { initializeModels } = require('./models');
-const configureServer = require('./config/server-config');
-const routes = require('./routes');
-const websocket = require('./utils/websocket');
-const fs = require('fs');
-const { ensureDirectoryExists } = require('./utils/fileSystem');
+const path = require('path');
+const WebSocket = require('ws');
+const { pool } = require('./config/database');
 
-// Initialize the Express app
+// Initialize express app
 const app = express();
+const PORT = process.env.PORT || 4000;
 
-// Apply server configuration
-const { PORT } = configureServer(app);
-
-// Add CORS and JSON parsing middleware
+// Middleware
 app.use(cors());
 app.use(express.json());
 
-// Ensure uploads directory exists
-ensureDirectoryExists(path.join(__dirname, '../uploads'));
+// Import routes
+const fileRoutes = require('./routes/fileRoutes');
+const projectRoutes = require('./routes/projectRoutes');
+const taskRoutes = require('./routes/taskRoutes');
+const roleRoutes = require('./routes/roleRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
+const annotationRoutes = require('./routes/annotationRoutes');
+const authRoutes = require('./routes/authRoutes');
+const dataAccessRoutes = require('./routes/dataAccessRoutes');
+const keypointsRoutes = require('./routes/keypointsRoutes');
 
-// Serve static files from uploads directory with access control
-app.use('/uploads', (req, res, next) => {
-    const urlPath = req.path;
-    const parts = urlPath.split('/');
+// Import file access middleware
+const { fileAccessMiddleware } = require('./middleware/fileAccessMiddleware');
 
-    // We need at least [0:empty, 1:folderId, 2:userFolder, ...] to check access
-    if (parts.length < 3) {
-        return next(); // Let it go through if it's a direct access to the folderId level
+// Test database connection
+pool.connect((err, client, done) => {
+    if (err) {
+        console.error('Error connecting to the database:', err);
+        process.exit(1);
+    } else {
+        console.log('Successfully connected to PostgreSQL database');
+        done();
     }
+});
 
-    const folderId = parts[1];
-    const userFolder = parts[2];
+// Serve uploads directory with access middleware
+app.use('/uploads', fileAccessMiddleware, express.static(path.join(__dirname, '..', 'uploads')));
 
-    // Skip access check if userFolder doesn't match our pattern (username_YYYYMMDD)
-    if (!userFolder.includes('_20')) {
-        return next();
-    }
-
-    // Check for access flag file
-    const accessFlagPath = path.join(__dirname, '../uploads', folderId, userFolder, '.access_disabled');
-    if (fs.existsSync(accessFlagPath)) {
-        // Return 404 Not Found instead of 403 Forbidden to make it look like the file doesn't exist
-        return res.status(404).send('Not Found');
-    }
-
-    // Access is allowed
-    next();
-}, express.static(path.join(__dirname, '../uploads')));
-
-// Mount all routes
-app.use(routes);
+// Register routes
+app.use('/api', fileRoutes);
+app.use('/api', projectRoutes);
+app.use('/api', taskRoutes);
+app.use('/api', roleRoutes);
+app.use('/api', notificationRoutes);
+app.use('/api', annotationRoutes);
+app.use('/api', authRoutes);
+app.use('/api', dataAccessRoutes);
+app.use('/api', keypointsRoutes);
 
 // Create HTTP server
-const server = http.createServer(app);
-
-// Set up WebSocket server
-const wss = websocket.initializeWebSocketServer(server);
-
-// Expose websocket functions to the app for broadcasting
-app.set('broadcastDataChange', (projectId, changeType, details) => {
-    websocket.broadcastDataChange(projectId, changeType, details);
+const server = app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
 });
 
-app.set('broadcastTaskUpdate', (taskId, changeType, details) => {
-    websocket.broadcastTaskUpdate(taskId, changeType, details);
-});
+// Initialize WebSocket server
+const wss = new WebSocket.Server({ server });
 
-// Initialize database models and start server
-initializeModels()
-    .then(() => {
-        // Start the server after models are initialized
-        server.listen(PORT, () => {
-            console.log(`Server running on http://localhost:${PORT}`);
-        });
-    })
-    .catch(err => {
-        console.error('Failed to initialize database models:', err);
-        process.exit(1);
+// Store connected clients
+const clients = new Set();
+
+// WebSocket connection handler
+wss.on('connection', (ws) => {
+    clients.add(ws);
+
+    ws.on('close', () => {
+        clients.delete(ws);
     });
-
-// Handle uncaught exceptions
-process.on('uncaughtException', (err) => {
-    console.error('Uncaught Exception:', err);
-    // Gracefully shutdown
-    server.close(() => {
-        process.exit(1);
-    });
-
-    // If server doesn't close in 5 seconds, force exit
-    setTimeout(() => {
-        process.exit(1);
-    }, 5000);
 });
 
-module.exports = server; // Export for testing
+// Store clients in app.locals for access from controllers
+app.locals.clients = clients;

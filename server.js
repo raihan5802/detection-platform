@@ -180,7 +180,6 @@ const storage = multer.diskStorage({
   }
 });
 
-
 // Update the multerMiddleware in server.js
 const multerMiddleware = multer({
   storage: multer.diskStorage({
@@ -891,7 +890,6 @@ app.get('/api/task-access/:taskId/:userId', (req, res) => {
 
 // Bulk update task access levels
 // Modified server endpoint to fix permission checking logic
-
 app.put('/api/task-access/:taskId/bulk-update', (req, res) => {
   try {
     const { taskId } = req.params;
@@ -2554,7 +2552,6 @@ app.get('/api/keypoints-config/:folderId/:taskId', (req, res) => {
 });
 
 // Add WebSocket server to server.js
-
 // At the top of the file, add:
 const WebSocket = require('ws');
 
@@ -2592,8 +2589,3 @@ const broadcastDataChange = (projectId) => {
     }
   });
 };
-
-// // Start server
-// app.listen(PORT, () => {
-//   console.log(`Server running on http://localhost:${PORT}`);
-// });

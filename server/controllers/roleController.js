@@ -1,458 +1,247 @@
-const { Role, User, Project, Notification } = require('../models');
+// database implementation - server/controller/roleController.js
+
 const { v4: uuidv4 } = require('uuid');
-const sequelize = require('../config/database');
-const { Op } = require('sequelize');
-const path = require('path');
-const fs = require('fs');
+const { pool } = require('../config/database');
 
 /**
  * Create role assignments
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-exports.createRoles = async (req, res) => {
+async function createRoles(req, res) {
+    const client = await pool.connect();
+
     try {
+        await client.query('BEGIN');
+
         const { projectId, ownerId, dataProviderId, collaboratorId } = req.body;
-        const timestamp = new Date().toISOString();
 
-        // Create owner role if it doesn't exist
-        const existingOwnerRole = await Role.findOne({
-            where: {
-                project_id: projectId,
-                user_id: ownerId,
-                role_type: 'project_owner'
-            }
+        // Check if roles already exist to avoid duplicates
+        const existingRolesQuery = 'SELECT user_id, role_type FROM roles WHERE project_id = $1';
+        const existingRolesResult = await client.query(existingRolesQuery, [projectId]);
+
+        const existingRoles = new Map();
+        existingRolesResult.rows.forEach(row => {
+            existingRoles.set(`${row.user_id}_${row.role_type}`, true);
         });
 
-        if (!existingOwnerRole) {
-            await Role.create({
-                role_id: uuidv4(),
-                project_id: projectId,
-                user_id: ownerId,
-                role_type: 'project_owner',
-                assigned_by: 'system',
-                assigned_at: timestamp
+        const rolesToAdd = [];
+        const rolesAdded = [];
+
+        // Check and add owner role if it doesn't exist
+        if (!existingRoles.has(`${ownerId}_project_owner`)) {
+            const roleId = uuidv4();
+            rolesToAdd.push({
+                roleId,
+                projectId,
+                userId: ownerId,
+                roleType: 'project_owner',
+                assignedBy: 'system'
             });
+            rolesAdded.push('project_owner');
         }
 
-        // Create data provider role if provided
-        if (dataProviderId) {
-            const existingProviderRole = await Role.findOne({
-                where: {
-                    project_id: projectId,
-                    user_id: dataProviderId,
-                    role_type: 'data_provider'
-                }
+        // Check and add data provider role if provided and doesn't exist
+        if (dataProviderId && !existingRoles.has(`${dataProviderId}_data_provider`)) {
+            const roleId = uuidv4();
+            rolesToAdd.push({
+                roleId,
+                projectId,
+                userId: dataProviderId,
+                roleType: 'data_provider',
+                assignedBy: ownerId
             });
+            rolesAdded.push('data_provider');
 
-            if (!existingProviderRole) {
-                await Role.create({
-                    role_id: uuidv4(),
-                    project_id: projectId,
-                    user_id: dataProviderId,
-                    role_type: 'data_provider',
-                    assigned_by: ownerId,
-                    assigned_at: timestamp
-                });
-            }
+            // Add notification for data provider
+            const notificationId = uuidv4(); // Generate a notification ID
+            await client.query(
+                'INSERT INTO notifications (notification_id, user_id, message, is_read, related_project_id) VALUES ($1, $2, $3, $4, $5)',
+                [
+                    notificationId, // Add the notification ID
+                    dataProviderId,
+                    `You have been assigned as data provider for project ${projectId}`,
+                    false,
+                    projectId
+                ]
+            );
         }
 
-        // Create collaborator role if provided
-        if (collaboratorId) {
-            const existingCollaboratorRole = await Role.findOne({
-                where: {
-                    project_id: projectId,
-                    user_id: collaboratorId,
-                    role_type: 'collaborator'
-                }
+        // Check and add collaborator role if provided and doesn't exist
+        if (collaboratorId && !existingRoles.has(`${collaboratorId}_collaborator`)) {
+            const roleId = uuidv4();
+            rolesToAdd.push({
+                roleId,
+                projectId,
+                userId: collaboratorId,
+                roleType: 'collaborator',
+                assignedBy: ownerId
             });
+            rolesAdded.push('collaborator');
 
-            if (!existingCollaboratorRole) {
-                await Role.create({
-                    role_id: uuidv4(),
-                    project_id: projectId,
-                    user_id: collaboratorId,
-                    role_type: 'collaborator',
-                    assigned_by: ownerId,
-                    assigned_at: timestamp
-                });
+            // Add notification for collaborator
+            const notificationId = uuidv4(); // Generate a notification ID
+            await client.query(
+                'INSERT INTO notifications (notification_id, user_id, message, is_read, related_project_id) VALUES ($1, $2, $3, $4, $5)',
+                [
+                    notificationId, // Add the notification ID
+                    collaboratorId,
+                    `You have been assigned as collaborator for project ${projectId}`,
+                    false,
+                    projectId
+                ]
+            );
+        }
+
+        // Insert all new roles in one batch if there are any
+        if (rolesToAdd.length > 0) {
+            const insertQuery = 'INSERT INTO roles (role_id, project_id, user_id, role_type, assigned_by) VALUES ($1, $2, $3, $4, $5)';
+
+            for (const role of rolesToAdd) {
+                await client.query(insertQuery, [
+                    role.roleId,
+                    role.projectId,
+                    role.userId,
+                    role.roleType,
+                    role.assignedBy
+                ]);
             }
         }
 
-        res.json({ message: 'Roles assigned successfully' });
-    } catch (error) {
-        console.error('Error assigning roles:', error);
-        res.status(500).json({ error: 'Failed to assign roles' });
-    }
-};
-
-/**
- * Get user's role for a specific project
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- */
-exports.getProjectRole = async (req, res) => {
-    try {
-        const { projectId, userId } = req.params;
-
-        const role = await Role.findOne({
-            where: {
-                project_id: projectId,
-                user_id: userId
-            }
-        });
-
-        res.json({ role: role ? role.role_type : null });
-    } catch (error) {
-        console.error('Error fetching role:', error);
-        res.status(500).json({ error: 'Failed to fetch role' });
-    }
-};
-
-/**
- * Get all projects a user has access to and their roles
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- */
-exports.getUserProjects = async (req, res) => {
-    try {
-        const { userId } = req.params;
-
-        // Find all roles for this user
-        const userRoles = await Role.findAll({
-            where: { user_id: userId },
-            include: [
-                {
-                    model: Project,
-                    include: [
-                        {
-                            model: User,
-                            attributes: ['username']
-                        }
-                    ]
-                }
-            ]
-        });
-
-        if (userRoles.length === 0) {
-            return res.json({ projects: [], roles: {} });
-        }
-
-        // Create role map and project list
-        const roles = {};
-        const projects = userRoles.map(role => {
-            const project = role.Project.toJSON();
-            roles[project.project_id] = role.role_type;
-
-            // Find thumbnail image for each project
-            const projectDir = path.join(__dirname, '../../', project.folder_path);
-
-            const findFirstImage = (dir) => {
-                if (!fs.existsSync(dir)) return null;
-
-                const items = fs.readdirSync(dir);
-
-                const imageFile = items.find(item => {
-                    const fullPath = path.join(dir, item);
-                    const isFile = fs.statSync(fullPath).isFile();
-                    const ext = path.extname(item).toLowerCase();
-                    return isFile && ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'].includes(ext);
-                });
-
-                if (imageFile) {
-                    return path.relative(projectDir, path.join(dir, imageFile))
-                        .replace(/\\/g, '/');
-                }
-
-                for (const item of items) {
-                    const fullPath = path.join(dir, item);
-                    if (fs.statSync(fullPath).isDirectory()) {
-                        const found = findFirstImage(fullPath);
-                        if (found) return found;
-                    }
-                }
-
-                return null;
-            };
-
-            const relativePath = findFirstImage(projectDir);
-            if (relativePath) {
-                project.thumbnailImage = `http://localhost:4000/${project.folder_path}/${relativePath}`;
-            }
-
-            return project;
-        });
-
-        res.json({ projects, roles });
-    } catch (error) {
-        console.error('Error fetching user projects:', error);
-        res.status(500).json({ error: 'Failed to fetch user projects' });
-    }
-};
-
-/**
- * Get project team members
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- */
-exports.getProjectMembers = async (req, res) => {
-    try {
-        const { projectId } = req.params;
-
-        const projectRoles = await Role.findAll({
-            where: {
-                project_id: projectId,
-                role_type: {
-                    [Op.ne]: 'project_owner'
-                }
-            },
-            include: [
-                {
-                    model: User,
-                    attributes: ['id', 'username', 'email']
-                }
-            ]
-        });
-
-        if (projectRoles.length === 0) {
-            return res.json([]);
-        }
-
-        const teamMembers = projectRoles.map(role => ({
-            user_id: role.User.id,
-            role_type: role.role_type,
-            username: role.User.username,
-            email: role.User.email
-        }));
-
-        res.json(teamMembers);
-    } catch (error) {
-        console.error('Error fetching project members:', error);
-        res.status(500).json({ error: 'Failed to fetch project members' });
-    }
-};
-
-/**
- * Add team members to a project
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- */
-exports.addProjectMembers = async (req, res) => {
-    const transaction = await sequelize.transaction();
-
-    try {
-        const {
-            projectId,
-            projectName,
-            ownerId,
-            dataProviderEmails,
-            collaboratorEmails
-        } = req.body;
-
-        if (!projectId || !ownerId) {
-            await transaction.rollback();
-            return res.status(400).json({ error: 'Project ID and owner ID are required' });
-        }
-
-        const timestamp = new Date().toISOString();
-        let addedCount = 0;
-
-        // Set to track processed users to avoid duplicates
-        const processedUsers = new Set();
-
-        // Get existing roles
-        const existingRoles = await Role.findAll({
-            where: { project_id: projectId },
-            transaction
-        });
-
-        // Add existing users to processed set
-        existingRoles.forEach(role => {
-            processedUsers.add(`${projectId}-${role.user_id}`);
-        });
-
-        // Process data providers
-        if (dataProviderEmails && dataProviderEmails.length > 0) {
-            for (const email of dataProviderEmails) {
-                const user = await User.findOne({
-                    where: { email },
-                    transaction
-                });
-
-                if (user) {
-                    // Check if already processed
-                    const userKey = `${projectId}-${user.id}`;
-                    if (processedUsers.has(userKey)) continue;
-
-                    processedUsers.add(userKey);
-
-                    // Create role
-                    await Role.create({
-                        role_id: uuidv4(),
-                        project_id: projectId,
-                        user_id: user.id,
-                        role_type: 'data_provider',
-                        assigned_by: ownerId,
-                        assigned_at: timestamp
-                    }, { transaction });
-
-                    // Create notification
-                    await Notification.create({
-                        notification_id: uuidv4(),
-                        user_id: user.id,
-                        message: `You have been assigned as data provider for project "${projectName}"`,
-                        is_read: false,
-                        related_project_id: projectId,
-                        created_at: timestamp
-                    }, { transaction });
-
-                    addedCount++;
-                }
-            }
-        }
-
-        // Process collaborators
-        if (collaboratorEmails && collaboratorEmails.length > 0) {
-            for (const email of collaboratorEmails) {
-                const user = await User.findOne({
-                    where: { email },
-                    transaction
-                });
-
-                if (user) {
-                    // Check if already processed
-                    const userKey = `${projectId}-${user.id}`;
-                    if (processedUsers.has(userKey)) continue;
-
-                    processedUsers.add(userKey);
-
-                    // Create role
-                    await Role.create({
-                        role_id: uuidv4(),
-                        project_id: projectId,
-                        user_id: user.id,
-                        role_type: 'collaborator',
-                        assigned_by: ownerId,
-                        assigned_at: timestamp
-                    }, { transaction });
-
-                    // Create notification
-                    await Notification.create({
-                        notification_id: uuidv4(),
-                        user_id: user.id,
-                        message: `You have been assigned as collaborator for project "${projectName}"`,
-                        is_read: false,
-                        related_project_id: projectId,
-                        created_at: timestamp
-                    }, { transaction });
-
-                    addedCount++;
-                }
-            }
-        }
-
-        await transaction.commit();
+        await client.query('COMMIT');
 
         res.json({
-            message: 'Team members added successfully',
-            addedCount
+            message: 'Roles assigned successfully',
+            rolesAdded
         });
     } catch (error) {
-        await transaction.rollback();
-        console.error('Error adding team members:', error);
-        res.status(500).json({ error: 'Failed to add team members' });
+        await client.query('ROLLBACK');
+        console.error('Error assigning roles:', error);
+        res.status(500).json({ error: 'Failed to assign roles' });
+    } finally {
+        client.release();
     }
-};
+}
 
 /**
  * Delete a role assignment
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-exports.deleteRole = async (req, res) => {
+async function deleteRole(req, res) {
     try {
         const { roleId } = req.params;
 
-        const deleted = await Role.destroy({
-            where: { role_id: roleId }
-        });
+        // Check if the role exists first
+        const roleCheckResult = await pool.query(
+            'SELECT role_id FROM roles WHERE role_id = $1',
+            [roleId]
+        );
 
-        if (!deleted) {
+        if (roleCheckResult.rows.length === 0) {
             return res.status(404).json({ error: 'Role not found' });
         }
+
+        // Delete the role
+        await pool.query(
+            'DELETE FROM roles WHERE role_id = $1',
+            [roleId]
+        );
 
         res.json({ message: 'Role removed successfully' });
     } catch (error) {
         console.error('Error removing role:', error);
         res.status(500).json({ error: 'Failed to remove role' });
     }
-};
+}
 
 /**
- * Add a new role assignment to an existing project
+ * Add a new role to an existing project
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-exports.addRoleToProject = async (req, res) => {
-    const transaction = await sequelize.transaction();
+async function addRoleToProject(req, res) {
+    const client = await pool.connect();
 
     try {
+        await client.query('BEGIN');
+
         const { projectId, userId, roleType, assignedBy } = req.body;
 
         if (!projectId || !userId || !roleType || !assignedBy) {
-            await transaction.rollback();
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
-        // Check if user already has a role in this project
-        const existingRole = await Role.findOne({
-            where: {
-                project_id: projectId,
-                user_id: userId
-            },
-            transaction
-        });
+        // Check if the project exists
+        const projectResult = await client.query(
+            'SELECT project_id FROM projects WHERE project_id = $1',
+            [projectId]
+        );
 
-        if (existingRole) {
-            await transaction.rollback();
+        if (projectResult.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        // Check if user already has a role in this project
+        const roleCheckResult = await client.query(
+            'SELECT role_id FROM roles WHERE project_id = $1 AND user_id = $2',
+            [projectId, userId]
+        );
+
+        if (roleCheckResult.rows.length > 0) {
+            await client.query('ROLLBACK');
             return res.status(400).json({ error: 'User already has a role in this project' });
         }
 
-        // Create new role
+        // Create the new role
         const roleId = uuidv4();
-        const timestamp = new Date().toISOString();
 
-        await Role.create({
-            role_id: roleId,
-            project_id: projectId,
-            user_id: userId,
-            role_type: roleType,
-            assigned_by: assignedBy,
-            assigned_at: timestamp
-        }, { transaction });
+        await client.query(
+            'INSERT INTO roles (role_id, project_id, user_id, role_type, assigned_by) VALUES ($1, $2, $3, $4, $5)',
+            [roleId, projectId, userId, roleType, assignedBy]
+        );
 
-        // Get project name
-        const project = await Project.findByPk(projectId, {
-            attributes: ['project_name'],
-            transaction
+        // Get project name for notification message
+        const projectNameResult = await client.query(
+            'SELECT project_name FROM projects WHERE project_id = $1',
+            [projectId]
+        );
+
+        const projectName = projectNameResult.rows.length > 0
+            ? projectNameResult.rows[0].project_name
+            : `Project ${projectId}`;
+
+        // Create notification for the user
+        const notificationId = uuidv4(); // Generate a notification ID
+        await client.query(
+            'INSERT INTO notifications (notification_id, user_id, message, is_read, related_project_id) VALUES ($1, $2, $3, $4, $5)',
+            [
+                notificationId, // Add the notification ID
+                userId,
+                `You have been assigned as ${roleType.replace('_', ' ')} for project "${projectName}"`,
+                false,
+                projectId
+            ]
+        );
+
+        await client.query('COMMIT');
+
+        res.json({
+            message: 'Role assigned successfully',
+            roleId
         });
-
-        // Create notification
-        await Notification.create({
-            notification_id: uuidv4(),
-            user_id: userId,
-            message: `You have been assigned as ${roleType.replace('_', ' ')} for project "${project ? project.project_name : projectId}"`,
-            is_read: false,
-            related_project_id: projectId,
-            created_at: timestamp
-        }, { transaction });
-
-        await transaction.commit();
-
-        res.json({ message: 'Role assigned successfully' });
     } catch (error) {
-        await transaction.rollback();
+        await client.query('ROLLBACK');
         console.error('Error assigning role:', error);
         res.status(500).json({ error: 'Failed to assign role' });
+    } finally {
+        client.release();
     }
+}
+
+module.exports = {
+    createRoles,
+    deleteRole,
+    addRoleToProject
 };

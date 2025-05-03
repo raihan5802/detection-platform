@@ -1172,6 +1172,7 @@ export default function Detection() {
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
                         folderId: projectData ? projectData.folder_path.split('/')[1] : '',
+                        taskId: taskId,
                         taskName,
                         labelClasses: updatedLabels,
                         annotations
